@@ -1099,7 +1099,7 @@ def rpn_bbox_loss_graph(config, target_bbox, rpn_match, rpn_bbox):
                                    config.IMAGES_PER_GPU)
 
     loss = smooth_l1_loss(target_bbox, rpn_bbox)
-    
+
     loss = K.switch(tf.size(input=loss) > 0, K.mean(loss), tf.constant(0.0))
     return loss
 
@@ -1929,7 +1929,7 @@ class MaskRCNN(object):
             # TODO: can this be optimized to avoid duplicating the anchors?
             anchors = np.broadcast_to(anchors, (config.BATCH_SIZE,) + anchors.shape)
             # A hack to get around Keras's bad support for constants
-            anchors = KL.Lambda(lambda x: tf.Variable(anchors), name="anchors")(input_image)
+            anchors = tf.constant(anchors, name="anchors")
         else:
             anchors = input_anchors
 
@@ -2354,9 +2354,9 @@ class MaskRCNN(object):
             callbacks=callbacks,
             validation_data=val_generator,
             validation_steps=self.config.VALIDATION_STEPS,
-            max_queue_size=100,
-            workers=workers,
-            use_multiprocessing=workers > 1,
+            max_queue_size=self.config.IMAGES_PER_GPU * self.config.GPU_COUNT * 4,
+            workers=6,
+            use_multiprocessing=False,
         )
         self.epoch = max(self.epoch, epochs)
 
