@@ -2090,7 +2090,7 @@ class MaskRCNN(object):
         checkpoint = os.path.join(dir_name, checkpoints[-1])
         return checkpoint
 
-    def load_weights(self, filepath, by_name=False, exclude=None):
+    def load_weights(self, filepaths, by_name=False, exclude=None):
         """Modified version of the corresponding Keras function with
         the addition of multi-GPU support and the ability to exclude
         some layers from loading.
@@ -2099,32 +2099,51 @@ class MaskRCNN(object):
         import h5py
         from tensorflow.python.keras.saving import hdf5_format
 
+        if type(filepaths) != list:
+            filepaths = [filepaths]
+
         if exclude:
             by_name = True
 
         if h5py is None:
             raise ImportError('`load_weights` requires h5py.')
-        with h5py.File(filepath, mode='r') as f:
-            if 'layer_names' not in f.attrs and 'model_weights' in f:
-                f = f['model_weights']
 
-            # In multi-GPU training, we wrap the model. Get layers
-            # of the inner model because they have the weights.
-            keras_model = self.keras_model
-            layers = keras_model.inner_model.layers if hasattr(keras_model, "inner_model")\
-                else keras_model.layers
+        members = []
+        # In multi-GPU training, we wrap the model. Get layers
+        # of the inner model because they have the weights.
+        keras_model = self.keras_model.inner_model if hasattr(self.keras_model,
+            "inner_model") else self.keras_model
 
-            # Exclude some layers
-            if exclude:
-                layers = filter(lambda l: l.name not in exclude, layers)
+        for filepath in filepaths:
+            with h5py.File(filepath, mode='r') as f:
+                if 'layer_names' not in f.attrs and 'model_weights' in f:
+                    f = f['model_weights']
 
-            if by_name:
-                hdf5_format.load_weights_from_hdf5_group_by_name(f, layers)
-            else:
-                hdf5_format.load_weights_from_hdf5_group(f, layers)
+                layers = keras_model.layers
+                num_layers = len(layers)
+
+                # Exclude some layers
+                if exclude:
+                    layers = filter(lambda l: l.name not in exclude, layers)
+
+                if by_name:
+                    hdf5_format.load_weights_from_hdf5_group_by_name(f, layers)
+                else:
+                    hdf5_format.load_weights_from_hdf5_group(f, layers)
+
+                members.append(keras_model.get_weights())
+
+        weights = [1 / len(members) for i in range(1, len(members) + 1)]
+        avg_model_weights = list()
+        for i in range(len(members[0])):
+            layer_weights = np.array([layers[i] for layers in members])
+            avg_layer_weights = np.average(layer_weights, axis=0, weights=weights)
+            avg_model_weights.append(avg_layer_weights)
+
+        keras_model.set_weights(avg_model_weights)
 
         # Update the log directory
-        self.set_log_dir(filepath)
+        self.set_log_dir(filepaths)
 
     def get_imagenet_weights(self):
         """Downloads ImageNet trained weights from Keras.
@@ -2146,7 +2165,7 @@ class MaskRCNN(object):
         """
         # Optimizer object
         optimizer = keras.optimizers.SGD(
-            lr=learning_rate, momentum=momentum,
+            lr=learning_rate, momentum=momentum, nesterov=True,
             clipnorm=self.config.GRADIENT_CLIP_NORM)
         # Add Losses
         loss_names = [
@@ -2354,7 +2373,7 @@ class MaskRCNN(object):
             callbacks=callbacks,
             validation_data=val_generator,
             validation_steps=self.config.VALIDATION_STEPS,
-            max_queue_size=self.config.IMAGES_PER_GPU * self.config.GPU_COUNT * 4,
+            max_queue_size=self.config.IMAGES_PER_GPU * self.config.GPU_COUNT * 2,
             workers=6,
             use_multiprocessing=False,
         )

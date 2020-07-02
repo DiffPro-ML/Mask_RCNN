@@ -84,7 +84,7 @@ def display_instances(image, boxes, masks, class_ids, class_names,
                       scores=None, title="",
                       figsize=(16, 16), ax=None,
                       show_mask=True, show_bbox=True, show_polygon=True,
-                      colors=None, captions=None):
+                      colors=None, captions=None, filename=None):
     """
     boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
     masks: [height, width, num_instances]
@@ -96,12 +96,14 @@ def display_instances(image, boxes, masks, class_ids, class_names,
     figsize: (optional) the size of the image
     colors: (optional) An array or colors to use with each object
     captions: (optional) A list of strings to use as captions for each object
+    filename: (optional) If given, save result in this file
     """
     # Number of instances
     N = boxes.shape[0]
     if not N:
         print("\n*** No instances to display *** \n")
     else:
+        #print(f"{boxes.shape[0]} == {masks.shape[-1]} == {class_ids.shape[0]}")
         assert boxes.shape[0] == masks.shape[-1] == class_ids.shape[0]
 
     # If no axis is passed, create one and automatically call show()
@@ -164,6 +166,10 @@ def display_instances(image, boxes, masks, class_ids, class_names,
                 p = Polygon(verts, facecolor="none", edgecolor=color)
                 ax.add_patch(p)
     ax.imshow(masked_image.astype(np.uint8))
+
+    if filename:
+        plt.savefig(filename, format="png", quality=95)
+
     if auto_show:
         plt.show()
 
@@ -171,9 +177,9 @@ def display_instances(image, boxes, masks, class_ids, class_names,
 def display_differences(image,
                         gt_box, gt_class_id, gt_mask,
                         pred_box, pred_class_id, pred_score, pred_mask,
-                        class_names, title="", ax=None,
-                        show_mask=True, show_box=True,
-                        iou_threshold=0.5, score_threshold=0.5):
+                        class_names, title="", ax=None, figsize=(8, 8),
+                        show_mask=True, show_box=True, show_polygon=True,
+                        iou_threshold=0.5, score_threshold=0.5, filename=None):
     """Display ground truth and prediction instances on the same image."""
     # Match predictions to ground truth
     gt_match, pred_match, overlaps = utils.compute_matches(
@@ -200,10 +206,10 @@ def display_differences(image,
     display_instances(
         image,
         boxes, masks, class_ids,
-        class_names, scores, ax=ax,
-        show_bbox=show_box, show_mask=show_mask,
+        class_names, scores, ax=ax, figsize=figsize,
+        show_bbox=show_box, show_mask=show_mask, show_polygon=show_polygon,
         colors=colors, captions=captions,
-        title=title)
+        title=title,filename=filename)
 
 
 def draw_rois(image, rois, refined_rois, mask, class_ids, class_names, limit=10):
